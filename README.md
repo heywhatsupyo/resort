@@ -111,6 +111,12 @@ want the database populated without running the server.
 | `GET /api/rooms`, `GET /api/bookings` | Booking tables from the original scaffold |
 | `POST /api/rooms`, `/api/guests`, `/api/bookings` | Create a room, guest or booking |
 
+A room cannot hold two overlapping stays. A stay is the half-open interval
+`[check_in, check_out)`, so a checkout and a check-in on the same day are fine
+and `POST /api/bookings` returns **409** for anything that genuinely overlaps.
+The rule is a trigger in `schema.sql` rather than a check in the API, so two
+concurrent requests cannot both pass it.
+
 ### Frontend — requires Node 20+
 
 ```bash

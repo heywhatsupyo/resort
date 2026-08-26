@@ -63,13 +63,67 @@ def add_guest(conn: sqlite3.Connection, name: str, email: str) -> int:
     return int(cur.lastrowid)
 
 
+# Text of the trigger's abort message, matched to tell an overlap apart from
+# any other integrity failure on the same insert.
+OVERLAP_MESSAGE = "booking overlaps an existing booking for this room"
+
+
+class BookingConflict(Exception):
+    """A booking would overlap an existing stay for the same room.
+
+    `conflict` is the offending row when it could be looked up, so callers can
+    say which stay is in the way rather than only that something was.
+    """
+
+    def __init__(self, conflict: dict | None = None) -> None:
+        self.conflict = conflict
+        super().__init__("Room is already booked for those dates")
+
+
+def find_booking_conflict(
+    conn: sqlite3.Connection,
+    room_id: int,
+    check_in: str,
+    check_out: str,
+    exclude_id: int | None = None,
+) -> dict | None:
+    """The first stay blocking [check_in, check_out) for a room, if any.
+
+    Advisory only — the trigger in schema.sql is what actually enforces this.
+    Use it to explain a rejection, not to decide one.
+    """
+    sql = """
+        SELECT b.id, b.check_in, b.check_out, g.name AS guest
+        FROM bookings b
+        JOIN guests g ON g.id = b.guest_id
+        WHERE b.room_id = ?
+          AND ? < b.check_out
+          AND b.check_in < ?
+    """
+    params: list[object] = [room_id, check_in, check_out]
+    if exclude_id is not None:
+        sql += " AND b.id <> ?"
+        params.append(exclude_id)
+
+    row = conn.execute(sql + " ORDER BY b.check_in LIMIT 1", params).fetchone()
+    return dict(row) if row else None
+
+
 def add_booking(
     conn: sqlite3.Connection, room_id: int, guest_id: int, check_in: str, check_out: str
 ) -> int:
-    cur = conn.execute(
-        "INSERT INTO bookings (room_id, guest_id, check_in, check_out) VALUES (?, ?, ?, ?)",
-        (room_id, guest_id, check_in, check_out),
-    )
+    """Book a room. Raises BookingConflict if the stay overlaps an existing one."""
+    try:
+        cur = conn.execute(
+            "INSERT INTO bookings (room_id, guest_id, check_in, check_out) VALUES (?, ?, ?, ?)",
+            (room_id, guest_id, check_in, check_out),
+        )
+    except sqlite3.IntegrityError as exc:
+        if OVERLAP_MESSAGE in str(exc):
+            raise BookingConflict(
+                find_booking_conflict(conn, room_id, check_in, check_out)
+            ) from exc
+        raise
     return int(cur.lastrowid)
 
 
