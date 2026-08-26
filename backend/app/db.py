@@ -109,6 +109,21 @@ def find_booking_conflict(
     return dict(row) if row else None
 
 
+def missing_references(conn: sqlite3.Connection, room_id: int, guest_id: int) -> list[str]:
+    """Which of `room_id` / `guest_id` do not resolve to a row.
+
+    Called only after a foreign-key failure, to say *which* reference was bad.
+    Never used to decide a rejection — the constraint does that — so there is no
+    check-then-write race to lose.
+    """
+    missing = []
+    if conn.execute("SELECT 1 FROM rooms WHERE id = ?", (room_id,)).fetchone() is None:
+        missing.append("room")
+    if conn.execute("SELECT 1 FROM guests WHERE id = ?", (guest_id,)).fetchone() is None:
+        missing.append("guest")
+    return missing
+
+
 def add_booking(
     conn: sqlite3.Connection, room_id: int, guest_id: int, check_in: str, check_out: str
 ) -> int:
