@@ -60,6 +60,17 @@ def get_resorts(conn: sqlite3.Connection = Depends(get_conn)) -> list[dict]:
     return db.list_resorts(conn)
 
 
+def conflict_detail(exc: db.BookingConflict) -> str:
+    """Name the stay that blocked the booking, when it is known."""
+    conflict = exc.conflict
+    if not conflict:
+        return "That room is already booked for those dates."
+    return (
+        f"That room is already booked from {conflict['check_in']} to "
+        f"{conflict['check_out']} by {conflict['guest']}."
+    )
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "db": str(db.db_path())}
@@ -99,6 +110,10 @@ def post_booking(booking: BookingIn, conn: sqlite3.Connection = Depends(get_conn
         booking_id = db.add_booking(
             conn, booking.room_id, booking.guest_id, booking.check_in, booking.check_out
         )
+    except db.BookingConflict as exc:
+        # 409, matching the duplicate-room response: the request is well formed,
+        # it just lost to a stay that is already on the books.
+        raise HTTPException(status_code=409, detail=conflict_detail(exc)) from exc
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"id": booking_id, **booking.model_dump()}
