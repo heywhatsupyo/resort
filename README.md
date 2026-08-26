@@ -117,7 +117,7 @@ and `POST /api/bookings` returns **409** for anything that genuinely overlaps.
 The rule is a trigger in `schema.sql` rather than a check in the API, so two
 concurrent requests cannot both pass it.
 
-### Frontend — requires Node 20+
+### Frontend — requires Node 20.19+ or 22.12+
 
 ```bash
 cd frontend
