@@ -99,7 +99,21 @@ python -m app.db seed                # create data/resort.db and load the shortl
 uvicorn app.main:app --reload        # http://127.0.0.1:8000/docs
 ```
 
-The database is one file, `data/resort.db`. Override its location with `RESORT_DB`.
+The database is one file, `data/resort.db`. Override its location with the
+`RESORT_DB` environment variable, which `db_path()` reads from the process
+environment — there is no `.env` loader, so export it or set it per command:
+
+```bash
+cd backend
+RESORT_DB=../data/other.db python -m app.db init
+RESORT_DB=../data/other.db uvicorn app.main:app --reload
+```
+
+Relative paths resolve against the working directory, so from `backend/` the
+repo's own database is `../data/resort.db`. An absolute path avoids the
+question. (Note that the Worker deployment does not use this at all — it reads
+resorts from a D1 binding; see “Deploying to Cloudflare” below.)
+
 The app seeds itself on startup, so `python -m app.db seed` is only needed if you
 want the database populated without running the server.
 
