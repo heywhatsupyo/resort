@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "resort",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-26",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    // Vite build output for the comparison UI.
+    "directory": "./frontend/dist",
+    "binding": "ASSETS",
+    // Unmatched paths serve index.html so client-side routing works.
+    "not_found_handling": "single-page-application",
+    // The Worker must see /api/* before the asset server tries to match a file.
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "resort",
+      "database_id": "22b81afe-1039-49e4-b5de-c139f67c9812"
+    }
+  ]
+}

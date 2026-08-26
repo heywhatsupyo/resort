@@ -12,6 +12,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Cloudflare
+.wrangler/
+.dev.vars
+
 # Database
 data/*.db
 data/*.db-journal
