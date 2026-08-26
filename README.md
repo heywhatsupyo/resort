@@ -134,6 +134,11 @@ cd backend  && pytest && ruff check .
 cd frontend && npm run typecheck && npm test && npm run build
 ```
 
+Frontend tests run in Vitest's `node` environment by default, which the pure
+helpers in `api.test.ts` don't need a DOM for. Files that render components opt
+into jsdom with a `// @vitest-environment jsdom` docblock, as `App.test.tsx`
+does.
+
 ## The SQL files
 
 `sql/` holds the dataset as portable SQL, for using the data outside this app:
