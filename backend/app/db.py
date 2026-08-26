@@ -86,9 +86,66 @@ def list_bookings(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+RESORT_COLUMNS = (
+    "name",
+    "destination",
+    "transport",
+    "travel_time",
+    "unit",
+    "bedrooms",
+    "one_unit",
+    "in_budget",
+    "nightly_low",
+    "nightly_high",
+    "review_score",
+    "review_scale",
+    "review_count",
+    "review_source",
+    "rank_note",
+    "highlights",
+    "watchouts",
+    "price_note",
+)
+
+
+def add_resort(conn: sqlite3.Connection, resort: dict) -> int:
+    placeholders = ", ".join("?" for _ in RESORT_COLUMNS)
+    columns = ", ".join(RESORT_COLUMNS)
+    cur = conn.execute(
+        f"INSERT OR REPLACE INTO resorts ({columns}) VALUES ({placeholders})",
+        tuple(resort.get(c) for c in RESORT_COLUMNS),
+    )
+    return int(cur.lastrowid)
+
+
+def list_resorts(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM resorts
+        ORDER BY in_budget DESC, one_unit DESC, nightly_low
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def seed_resorts(path: Path | None = None) -> int:
+    """Load the researched resort shortlist. Creates the schema first; safe to re-run."""
+    from .seed_data import RESORTS
+
+    init_db(path)
+    with session(path) as conn:
+        for resort in RESORTS:
+            add_resort(conn, resort)
+    return len(RESORTS)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "init":
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "init":
         print(f"initialized {init_db()}")
+    elif command == "seed":
+        init_db()
+        print(f"seeded {seed_resorts()} resorts into {db_path()}")
     else:
-        print("usage: python -m app.db init", file=sys.stderr)
+        print("usage: python -m app.db [init|seed]", file=sys.stderr)
         raise SystemExit(2)

@@ -36,3 +36,7 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B"]
 # FastAPI's Depends() in argument defaults is the documented idiom.
 ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# seed_data.py is prose research data; long descriptive strings are fine there.
+"app/seed_data.py" = ["E501"]

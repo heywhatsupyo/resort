@@ -9,11 +9,13 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from . import db
+from .seed_data import TRIP
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    db.seed_resorts()
     yield
 
 
@@ -45,6 +47,17 @@ class BookingIn(BaseModel):
     guest_id: int
     check_in: str
     check_out: str
+
+
+@app.get("/api/trip")
+def get_trip() -> dict:
+    """The trip this shortlist was researched for."""
+    return TRIP
+
+
+@app.get("/api/resorts")
+def get_resorts(conn: sqlite3.Connection = Depends(get_conn)) -> list[dict]:
+    return db.list_resorts(conn)
 
 
 @app.get("/api/health")
