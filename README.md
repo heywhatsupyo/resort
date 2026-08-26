@@ -117,7 +117,7 @@ and `POST /api/bookings` returns **409** for anything that genuinely overlaps.
 The rule is a trigger in `schema.sql` rather than a check in the API, so two
 concurrent requests cannot both pass it.
 
-### Frontend — requires Node 20+
+### Frontend — requires Node 20.19+, 22.13+ or 24+
 
 ```bash
 cd frontend
@@ -137,7 +137,8 @@ cd frontend && npm run typecheck && npm test && npm run build
 Frontend tests run in Vitest's `node` environment by default, which the pure
 helpers in `api.test.ts` don't need a DOM for. Files that render components opt
 into jsdom with a `// @vitest-environment jsdom` docblock, as `App.test.tsx`
-does.
+does. `jsdom` is held at 29.x deliberately: 30.x requires Node 22.22+, and CI
+covers Node 20.
 
 ## The SQL files
 
