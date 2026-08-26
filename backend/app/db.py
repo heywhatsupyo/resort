@@ -128,9 +128,15 @@ def add_booking(
 
 
 def list_bookings(conn: sqlite3.Connection) -> list[dict]:
+    """Bookings with the room and guest names, deliberately without contact details.
+
+    The guest's email is a contact detail with no reader here, and this endpoint
+    is unauthenticated. A staff-facing view that needs it is the right place to
+    reintroduce it, scoped to whatever auth exists by then.
+    """
     rows = conn.execute(
         """
-        SELECT b.id, b.check_in, b.check_out, r.name AS room, g.name AS guest, g.email
+        SELECT b.id, b.check_in, b.check_out, r.name AS room, g.name AS guest
         FROM bookings b
         JOIN rooms  r ON r.id = b.room_id
         JOIN guests g ON g.id = b.guest_id

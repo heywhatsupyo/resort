@@ -56,3 +56,15 @@ def test_booking_requires_existing_room(conn):
     guest_id = db.add_guest(conn, "Alan", "alan@example.com")
     with pytest.raises(sqlite3.IntegrityError):
         db.add_booking(conn, 999, guest_id, "2026-09-01", "2026-09-02")
+
+
+def test_list_bookings_omits_guest_contact_details(conn):
+    """`GET /api/bookings` is unauthenticated; the email has no reader there."""
+    room_id = db.add_room(conn, "Ocean View", 4, 42_000)
+    guest_id = db.add_guest(conn, "Ada", "ada@example.com")
+    db.add_booking(conn, room_id, guest_id, "2026-09-01", "2026-09-05")
+    conn.commit()
+
+    [booking] = db.list_bookings(conn)
+    assert "email" not in booking
+    assert "ada@example.com" not in str(booking)
