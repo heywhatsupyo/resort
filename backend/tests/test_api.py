@@ -1,6 +1,9 @@
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app import main
 from app.main import app
 
 
@@ -15,6 +18,35 @@ def test_health(client):
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_health_does_not_disclose_the_database_path(client, tmp_path):
+    """The endpoint is public by convention, so it must not describe the disk."""
+    body = response_text = client.get("/api/health").text
+    assert "resort.db" not in body
+    assert str(tmp_path) not in response_text
+    assert set(client.get("/api/health").json()) == {"status", "db"}
+
+
+class UnreachableConnection:
+    """Stands in for a database that is there but will not answer."""
+
+    def execute(self, *args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    def commit(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def test_health_reports_an_unreachable_database(client, monkeypatch):
+    """`ok` should mean the database answered, not just that the process is up."""
+    monkeypatch.setattr(main.db, "connect", lambda *a, **kw: UnreachableConnection())
+    response = client.get("/api/health")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "database unavailable"
 
 
 def test_create_and_list_rooms(client):
@@ -80,3 +112,26 @@ def test_booking_with_bad_dates_rejected(client):
         },
     )
     assert bad.status_code == 400
+
+
+def test_bookings_payload_has_no_guest_email(client):
+    room_id = client.post(
+        "/api/rooms", json={"name": "Dune Suite", "capacity": 2, "rate_cents": 30_000}
+    ).json()["id"]
+    guest_id = client.post(
+        "/api/guests", json={"name": "Grace", "email": "grace@example.com"}
+    ).json()["id"]
+    client.post(
+        "/api/bookings",
+        json={
+            "room_id": room_id,
+            "guest_id": guest_id,
+            "check_in": "2026-10-01",
+            "check_out": "2026-10-03",
+        },
+    )
+
+    response = client.get("/api/bookings")
+    assert response.status_code == 200
+    assert "grace@example.com" not in response.text
+    assert all("email" not in booking for booking in response.json())
