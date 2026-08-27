@@ -121,7 +121,7 @@ want the database populated without running the server.
 |---|---|
 | `GET /api/resorts` | The shortlist, in-budget and single-unit options first |
 | `GET /api/trip` | Trip dates, party size, the Deepavali note |
-| `GET /api/health` | Status and the resolved database path |
+| `GET /api/health` | Liveness, and whether the database answers |
 | `GET /api/rooms`, `GET /api/bookings` | Booking tables from the original scaffold |
 | `POST /api/rooms`, `/api/guests`, `/api/bookings` | Create a room, guest or booking |
 
