@@ -6,7 +6,7 @@ import os
 import sqlite3
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -18,19 +18,34 @@ def db_path() -> Path:
     return Path(os.environ.get("RESORT_DB", DEFAULT_DB_PATH))
 
 
+# How long a writer waits for the write lock before giving up. WAL lets readers
+# run against a writer, but two writers still serialise.
+BUSY_TIMEOUT_MS = 5_000
+
+
 def connect(path: Path | None = None) -> sqlite3.Connection:
     target = path or db_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target)
+    # check_same_thread=False because FastAPI runs a sync dependency and the sync
+    # endpoint that consumes it as two separate run_in_threadpool hops, which
+    # frequently land on different anyio worker threads. Each request still gets
+    # its own connection, so nothing is genuinely shared between concurrent
+    # requests — the flag only relaxes a check that is too strict for this
+    # ownership pattern. This is what the FastAPI SQL docs recommend.
+    conn = sqlite3.connect(target, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
     return conn
 
 
 def init_db(path: Path | None = None) -> Path:
     """Create the database file and apply schema.sql. Idempotent."""
     target = path or db_path()
-    with connect(target) as conn:
+    # `with conn` is sqlite3's *transaction* manager — it commits on exit and
+    # leaves the connection open. `closing` is what releases the file handle,
+    # which matters on Windows, where a live handle keeps the file locked.
+    with closing(connect(target)) as conn, conn:
         conn.executescript(SCHEMA_PATH.read_text())
     return target
 
@@ -143,9 +158,15 @@ def add_booking(
 
 
 def list_bookings(conn: sqlite3.Connection) -> list[dict]:
+    """Bookings with the room and guest names, deliberately without contact details.
+
+    The guest's email is a contact detail with no reader here, and this endpoint
+    is unauthenticated. A staff-facing view that needs it is the right place to
+    reintroduce it, scoped to whatever auth exists by then.
+    """
     rows = conn.execute(
         """
-        SELECT b.id, b.check_in, b.check_out, r.name AS room, g.name AS guest, g.email
+        SELECT b.id, b.check_in, b.check_out, r.name AS room, g.name AS guest
         FROM bookings b
         JOIN rooms  r ON r.id = b.room_id
         JOIN guests g ON g.id = b.guest_id

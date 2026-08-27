@@ -83,6 +83,29 @@ def test_booking_with_bad_dates_rejected(client):
     assert bad.json()["detail"] == "check_out must be later than check_in."
 
 
+def test_bookings_payload_has_no_guest_email(client):
+    room_id = client.post(
+        "/api/rooms", json={"name": "Dune Suite", "capacity": 2, "rate_cents": 30_000}
+    ).json()["id"]
+    guest_id = client.post(
+        "/api/guests", json={"name": "Grace", "email": "grace@example.com"}
+    ).json()["id"]
+    client.post(
+        "/api/bookings",
+        json={
+            "room_id": room_id,
+            "guest_id": guest_id,
+            "check_in": "2026-10-01",
+            "check_out": "2026-10-03",
+        },
+    )
+
+    response = client.get("/api/bookings")
+    assert response.status_code == 200
+    assert "grace@example.com" not in response.text
+    assert all("email" not in booking for booking in response.json())
+
+
 # --------------------------------------------------------------------------
 # #3: stable details, and failure modes the caller can tell apart
 # --------------------------------------------------------------------------
