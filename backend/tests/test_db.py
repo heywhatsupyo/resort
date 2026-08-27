@@ -58,6 +58,29 @@ def test_booking_requires_existing_room(conn):
         db.add_booking(conn, 999, guest_id, "2026-09-01", "2026-09-02")
 
 
+def test_init_db_closes_its_connection(tmp_path, monkeypatch):
+    """`with conn` only commits; the handle has to be closed explicitly.
+
+    A leaked handle keeps the file locked on Windows, so `tmp_path` cleanup
+    fails for every test that calls `init_db`.
+    """
+    opened: list[sqlite3.Connection] = []
+    real_connect = sqlite3.connect
+
+    def recording_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", recording_connect)
+    db.init_db(tmp_path / "resort.db")
+
+    assert opened, "init_db did not open a connection"
+    for conn in opened:
+        with pytest.raises(sqlite3.ProgrammingError):
+            conn.execute("SELECT 1")
+
+
 def test_list_bookings_omits_guest_contact_details(conn):
     """`GET /api/bookings` is unauthenticated; the email has no reader there."""
     room_id = db.add_room(conn, "Ocean View", 4, 42_000)

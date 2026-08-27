@@ -6,7 +6,7 @@ import os
 import sqlite3
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -30,7 +30,10 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 def init_db(path: Path | None = None) -> Path:
     """Create the database file and apply schema.sql. Idempotent."""
     target = path or db_path()
-    with connect(target) as conn:
+    # `with conn` is sqlite3's *transaction* manager — it commits on exit and
+    # leaves the connection open. `closing` is what releases the file handle,
+    # which matters on Windows, where a live handle keeps the file locked.
+    with closing(connect(target)) as conn, conn:
         conn.executescript(SCHEMA_PATH.read_text())
     return target
 
