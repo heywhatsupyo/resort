@@ -99,7 +99,21 @@ python -m app.db seed                # create data/resort.db and load the shortl
 uvicorn app.main:app --reload        # http://127.0.0.1:8000/docs
 ```
 
-The database is one file, `data/resort.db`. Override its location with `RESORT_DB`.
+The database is one file, `data/resort.db`. Override its location with the
+`RESORT_DB` environment variable, which `db_path()` reads from the process
+environment — there is no `.env` loader, so export it or set it per command:
+
+```bash
+cd backend
+RESORT_DB=../data/other.db python -m app.db init
+RESORT_DB=../data/other.db uvicorn app.main:app --reload
+```
+
+Relative paths resolve against the working directory, so from `backend/` the
+repo's own database is `../data/resort.db`. An absolute path avoids the
+question. (Note that the Worker deployment does not use this at all — it reads
+resorts from a D1 binding; see “Deploying to Cloudflare” below.)
+
 The app seeds itself on startup, so `python -m app.db seed` is only needed if you
 want the database populated without running the server.
 
@@ -107,7 +121,7 @@ want the database populated without running the server.
 |---|---|
 | `GET /api/resorts` | The shortlist, in-budget and single-unit options first |
 | `GET /api/trip` | Trip dates, party size, the Deepavali note |
-| `GET /api/health` | Status and the resolved database path |
+| `GET /api/health` | Liveness, and whether the database answers |
 | `GET /api/rooms`, `GET /api/bookings` | Booking tables from the original scaffold |
 | `POST /api/rooms`, `/api/guests`, `/api/bookings` | Create a room, guest or booking |
 
@@ -117,7 +131,16 @@ and `POST /api/bookings` returns **409** for anything that genuinely overlaps.
 The rule is a trigger in `schema.sql` rather than a check in the API, so two
 concurrent requests cannot both pass it.
 
-### Frontend — requires Node 20.19+ or 22.12+
+Write failures are distinguishable by status, and the `detail` is written by
+hand rather than forwarded from the database:
+
+| Status | Means |
+|---|---|
+| **404** | `room_id` or `guest_id` does not resolve; the detail names which |
+| **409** | a duplicate room name or guest email, or a stay that overlaps |
+| **422** | the request is malformed — a bad date, or `check_out` not after `check_in` |
+
+### Frontend — requires Node 20.19+, 22.13+ or 24+
 
 ```bash
 cd frontend
@@ -133,6 +156,12 @@ npm run dev        # http://127.0.0.1:5173
 cd backend  && pytest && ruff check .
 cd frontend && npm run typecheck && npm test && npm run build
 ```
+
+Frontend tests run in Vitest's `node` environment by default, which the pure
+helpers in `api.test.ts` don't need a DOM for. Files that render components opt
+into jsdom with a `// @vitest-environment jsdom` docblock, as `App.test.tsx`
+does. `jsdom` is held at 29.x deliberately: 30.x requires Node 22.22+, and CI
+covers Node 20.
 
 ## The SQL files
 

@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { formatRate, midpoint, nights, perPerson, scoreOutOfTen, sgd } from "./api";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  fetchResorts,
+  fetchTrip,
+  formatRate,
+  midpoint,
+  nights,
+  perPerson,
+  scoreOutOfTen,
+  sgd,
+} from "./api";
 
 describe("formatRate", () => {
   it("renders whole dollars", () => {
@@ -81,5 +90,37 @@ describe("perPerson", () => {
   it("guards against no total or no people", () => {
     expect(perPerson(null, 6)).toBeNull();
     expect(perPerson(1200, 0)).toBeNull();
+  });
+});
+
+describe("get", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the parsed body of an ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => [{ id: 1 }] }) as Response),
+    );
+    await expect(fetchResorts()).resolves.toEqual([{ id: 1 }]);
+  });
+
+  it("throws on a non-ok response, naming the path and status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response),
+    );
+    await expect(fetchResorts()).rejects.toThrowError("/api/resorts responded 503");
+  });
+
+  it("does not swallow a rejected request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+    await expect(fetchTrip()).rejects.toThrowError("network down");
   });
 });

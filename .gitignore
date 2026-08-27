@@ -25,7 +25,6 @@ data/*.db-shm
 # Env / editors / OS
 .env
 .env.*
-!.env.example
 .vscode/
 .idea/
 .DS_Store
