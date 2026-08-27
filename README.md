@@ -131,6 +131,15 @@ and `POST /api/bookings` returns **409** for anything that genuinely overlaps.
 The rule is a trigger in `schema.sql` rather than a check in the API, so two
 concurrent requests cannot both pass it.
 
+Write failures are distinguishable by status, and the `detail` is written by
+hand rather than forwarded from the database:
+
+| Status | Means |
+|---|---|
+| **404** | `room_id` or `guest_id` does not resolve; the detail names which |
+| **409** | a duplicate room name or guest email, or a stay that overlaps |
+| **422** | the request is malformed — a bad date, or `check_out` not after `check_in` |
+
 ### Frontend — requires Node 20.19+, 22.13+ or 24+
 
 ```bash

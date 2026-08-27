@@ -214,8 +214,8 @@ def test_conflict_detail_names_the_guest_in_the_way(client):
     assert "2026-09-01" in detail and "2026-09-10" in detail and "Ada" in detail
 
 
-def test_reversed_dates_are_still_a_400_not_a_409(client):
-    """The pre-existing CHECK failure must not be reclassified as a conflict."""
+def test_reversed_dates_are_a_422_not_a_409(client):
+    """The CHECK failure must stay a bad range, not be reclassified as a conflict."""
     room, ada, _ = _seed(client)
     bad = client.post(
         "/api/bookings",
@@ -226,7 +226,7 @@ def test_reversed_dates_are_still_a_400_not_a_409(client):
             "check_out": "2026-09-01",
         },
     )
-    assert bad.status_code == 400
+    assert bad.status_code == 422
 
 
 # --------------------------------------------------------------------------
