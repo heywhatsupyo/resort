@@ -215,7 +215,11 @@ def test_conflict_detail_names_the_guest_in_the_way(client):
 
 
 def test_reversed_dates_are_a_422_not_a_409(client):
-    """A bad range must stay a validation failure, not be read as a conflict."""
+    """A bad range must stay a validation failure, not be read as a conflict.
+
+    Rejected by BookingIn now rather than by the CHECK constraint, but the
+    point is unchanged: it must not be reported as an overlap.
+    """
     room, ada, _ = _seed(client)
     bad = client.post(
         "/api/bookings",
