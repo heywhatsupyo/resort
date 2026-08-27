@@ -10,7 +10,6 @@ export interface Booking {
   id: number;
   room: string;
   guest: string;
-  email: string;
   check_in: string;
   check_out: string;
 }
