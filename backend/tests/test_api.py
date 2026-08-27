@@ -112,7 +112,10 @@ def test_booking_with_bad_dates_rejected(client):
         },
     )
     assert bad.status_code == 422
-    assert bad.json()["detail"] == "check_out must be later than check_in."
+    # BookingIn rejects the range, so this is FastAPI's request-validation body
+    # rather than the flat `detail` string the endpoint returns for a constraint
+    # failure. Assert the reason, not the envelope.
+    assert "check_out must be later than check_in" in bad.text
 
 
 def test_bookings_payload_has_no_guest_email(client):
@@ -274,3 +277,102 @@ def test_no_sqlite_message_reaches_a_client(client):
     for body in bodies:
         assert "constraint failed" not in body
         assert "rooms." not in body and "guests." not in body and "bookings." not in body
+
+
+# --------------------------------------------------------------------------
+# #2: check_in / check_out are dates, not arbitrary strings
+# --------------------------------------------------------------------------
+
+
+def _stay(client, **dates) -> tuple[int, dict]:
+    room_id = client.post(
+        "/api/rooms", json={"name": "Lagoon Hut", "capacity": 2, "rate_cents": 20_000}
+    ).json()["id"]
+    guest_id = client.post("/api/guests", json={"name": "Ada", "email": "ada@example.com"}).json()[
+        "id"
+    ]
+    response = client.post(
+        "/api/bookings", json={"room_id": room_id, "guest_id": guest_id, **dates}
+    )
+    return response.status_code, response.json()
+
+
+@pytest.mark.parametrize(
+    "check_in, check_out",
+    [
+        ("banana", "carrot"),
+        ("2026-13-45", "2026-99-99"),
+        ("2026-02-30", "2026-03-01"),
+        ("", ""),
+        ("2026-09-01", "not-a-date"),
+    ],
+)
+def test_non_dates_are_rejected(client, check_in, check_out):
+    status, _ = _stay(client, check_in=check_in, check_out=check_out)
+    assert status == 422
+
+
+@pytest.mark.parametrize(
+    "check_in, check_out",
+    [
+        # Reversed ranges the lexicographic CHECK let through, because the
+        # input was not zero-padded: at the ninth character "9" > "1".
+        ("2026-9-10", "2026-9-9"),
+        ("01/05/2026", "05/01/2026"),
+    ],
+)
+def test_unpadded_reversed_ranges_are_rejected(client, check_in, check_out):
+    """These returned 201 while the only guard was `CHECK (check_out > check_in)`."""
+    status, _ = _stay(client, check_in=check_in, check_out=check_out)
+    assert status == 422
+
+
+def test_equal_dates_are_rejected(client):
+    """A stay is half-open, so a zero-night range is not a stay."""
+    status, _ = _stay(client, check_in="2026-09-01", check_out="2026-09-01")
+    assert status == 422
+
+
+def test_accepted_dates_are_stored_as_padded_iso(client):
+    """What ORDER BY check_in and the CHECK constraint both rely on."""
+    status, created = _stay(client, check_in="2026-09-01", check_out="2026-09-05")
+    assert status == 201
+    assert created["check_in"] == "2026-09-01"
+    assert created["check_out"] == "2026-09-05"
+
+    [booking] = client.get("/api/bookings").json()
+    assert booking["check_in"] == "2026-09-01"
+    assert booking["check_out"] == "2026-09-05"
+
+
+def test_bookings_list_sorts_chronologically(client):
+    """Garbage check-in values used to sort wherever they happened to fall."""
+    room_a = client.post(
+        "/api/rooms", json={"name": "Room A", "capacity": 2, "rate_cents": 10_000}
+    ).json()["id"]
+    room_b = client.post(
+        "/api/rooms", json={"name": "Room B", "capacity": 2, "rate_cents": 10_000}
+    ).json()["id"]
+    guest_id = client.post(
+        "/api/guests", json={"name": "Grace", "email": "grace@example.com"}
+    ).json()["id"]
+
+    for room_id, check_in, check_out in [
+        (room_a, "2026-10-05", "2026-10-07"),
+        (room_b, "2026-09-01", "2026-09-03"),
+    ]:
+        assert (
+            client.post(
+                "/api/bookings",
+                json={
+                    "room_id": room_id,
+                    "guest_id": guest_id,
+                    "check_in": check_in,
+                    "check_out": check_out,
+                },
+            ).status_code
+            == 201
+        )
+
+    check_ins = [b["check_in"] for b in client.get("/api/bookings").json()]
+    assert check_ins == sorted(check_ins) == ["2026-09-01", "2026-10-05"]
