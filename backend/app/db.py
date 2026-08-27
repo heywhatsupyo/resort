@@ -18,12 +18,24 @@ def db_path() -> Path:
     return Path(os.environ.get("RESORT_DB", DEFAULT_DB_PATH))
 
 
+# How long a writer waits for the write lock before giving up. WAL lets readers
+# run against a writer, but two writers still serialise.
+BUSY_TIMEOUT_MS = 5_000
+
+
 def connect(path: Path | None = None) -> sqlite3.Connection:
     target = path or db_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target)
+    # check_same_thread=False because FastAPI runs a sync dependency and the sync
+    # endpoint that consumes it as two separate run_in_threadpool hops, which
+    # frequently land on different anyio worker threads. Each request still gets
+    # its own connection, so nothing is genuinely shared between concurrent
+    # requests — the flag only relaxes a check that is too strict for this
+    # ownership pattern. This is what the FastAPI SQL docs recommend.
+    conn = sqlite3.connect(target, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
     return conn
 
 
