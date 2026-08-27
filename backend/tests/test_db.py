@@ -79,3 +79,15 @@ def test_init_db_closes_its_connection(tmp_path, monkeypatch):
     for conn in opened:
         with pytest.raises(sqlite3.ProgrammingError):
             conn.execute("SELECT 1")
+
+
+def test_list_bookings_omits_guest_contact_details(conn):
+    """`GET /api/bookings` is unauthenticated; the email has no reader there."""
+    room_id = db.add_room(conn, "Ocean View", 4, 42_000)
+    guest_id = db.add_guest(conn, "Ada", "ada@example.com")
+    db.add_booking(conn, room_id, guest_id, "2026-09-01", "2026-09-05")
+    conn.commit()
+
+    [booking] = db.list_bookings(conn)
+    assert "email" not in booking
+    assert "ada@example.com" not in str(booking)
