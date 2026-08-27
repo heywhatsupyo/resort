@@ -12,11 +12,17 @@ from pydantic import BaseModel, EmailStr, Field
 from . import db
 from .seed_data import TRIP
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
     db.seed_resorts()
+    # The resolved path is useful when a deployment reads the wrong database,
+    # but it describes the filesystem layout, so it belongs in the operator's
+    # logs once at startup rather than in a public response on every request.
+    logger.info("database: %s", db.db_path())
     yield
 
 
@@ -113,8 +119,19 @@ def unresolved_reference_detail(conn: sqlite3.Connection, room_id: int, guest_id
 
 
 @app.get("/api/health")
-def health() -> dict:
-    return {"status": "ok", "db": str(db.db_path())}
+def health(conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    """Liveness, plus proof the database actually answers.
+
+    Deliberately says nothing about *where* the database is: health checks are
+    conventionally the one route left unauthenticated and reachable from load
+    balancers, so anything here is public.
+    """
+    try:
+        conn.execute("SELECT 1").fetchone()
+    except sqlite3.Error as exc:
+        logger.exception("health check could not reach the database")
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return {"status": "ok", "db": "ok"}
 
 
 @app.get("/api/rooms")
